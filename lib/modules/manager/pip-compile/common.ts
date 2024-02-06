@@ -7,7 +7,7 @@ import type { ExecOptions } from '../../../util/exec/types';
 import { ensureCacheDir } from '../../../util/fs';
 import { regEx } from '../../../util/regex';
 import type { UpdateArtifactsConfig } from '../types';
-import type { PipCompileArgs } from './types';
+import type { GlobalRequirementsFileOptions, PipCompileArgs } from './types';
 
 export async function getExecOptions(
   config: UpdateArtifactsConfig,
@@ -210,4 +210,23 @@ function throwForUnknownOption(arg: string): void {
     }
   }
   throw new Error(`Option ${arg} not supported (yet)`);
+}
+
+// this could be moved to pip_requirements manager
+export function extractRequirementsFileOptions(
+  content: string,
+): GlobalRequirementsFileOptions {
+  const options: GlobalRequirementsFileOptions = {};
+  for (const line of content) {
+    if (line.startsWith('-i') || line.startsWith('--index-url')) {
+      options.indexUrl = line.split(' ')[1];
+    }
+    if (line.startsWith('--extra-index-url')) {
+      if (!options.extraIndexUrl) {
+        options.extraIndexUrl = [];
+      }
+      options.extraIndexUrl.push(line.split(' ')[1]);
+    }
+  }
+  return options;
 }
