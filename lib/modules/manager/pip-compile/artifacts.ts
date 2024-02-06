@@ -9,6 +9,7 @@ import {
   writeLocalFile,
 } from '../../../util/fs';
 import { getRepoStatus } from '../../../util/git';
+import { sanitize } from '../../../util/sanitize';
 import type { UpdateArtifact, UpdateArtifactsResult } from '../types';
 import { extractHeaderCommand, getExecOptions } from './common';
 
@@ -80,11 +81,12 @@ export async function updateArtifacts({
       if (err.message === TEMPORARY_ERROR) {
         throw err;
       }
+      // TODO sanitize debug
       logger.debug({ err }, 'Failed to pip-compile');
       result.push({
         artifactError: {
           lockFile: outputFileName,
-          stderr: err.message,
+          stderr: sanitize(err.message),
         },
       });
     }
