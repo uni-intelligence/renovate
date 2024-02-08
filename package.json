@@ -1,7 +1,7 @@
 {
-  "name": "renovate",
+  "name": "@not7cd/renovate",
   "description": "Automated dependency updates. Flexible so you don't need to be.",
-  "version": "0.0.0-semantic-release",
+  "version": "0.0.0-pip-compile0",
   "type": "commonjs",
   "bin": {
     "renovate": "dist/renovate.js",
