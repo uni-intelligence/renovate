@@ -1,12 +1,11 @@
 import is from '@sindresorhus/is';
-import { Command } from 'commander';
 import { split } from 'shlex';
-import upath from 'upath';
 import { logger } from '../../../logger';
 import type { ExecOptions } from '../../../util/exec/types';
 import { ensureCacheDir } from '../../../util/fs';
 import { regEx } from '../../../util/regex';
 import type { UpdateArtifactsConfig } from '../types';
+import type { PipCompileArgs } from './types';
 
 // TODO(not7cd): rename to getPipToolsVersionConstraint, as constraints have their meaning in pip
 export function getPipToolsConstraint(config: UpdateArtifactsConfig): string {
@@ -71,159 +70,143 @@ export const optionsWithArguments = [
   '--extra',
   '--extra-index-url',
   '--resolver',
+  '--constraint',
 ];
 export const allowedPipOptions = [
   '-v',
   '--allow-unsafe',
   '--generate-hashes',
-  '--no-emit-index-url', // TODO: handle this!!!
+  '--no-emit-index-url',
+  '--emit-index-url',
   '--strip-extras',
+  '--index-url',
   ...optionsWithArguments,
 ];
-
-// as commander.js is already used, we will reuse it's argument parsing capability
-const dummyPipCompile = new Command();
-dummyPipCompile
-  .argument('[sourceFile...]') // optional, so extractHeaderCommand can throw an explicit error
-  .option('--output-file <path>')
-  .option('--extra <extra...>')
-  .option('--extra-index-url <url...>')
-  .allowUnknownOption();
-
-interface PipCompileArgs {
-  command: string;
-  isCustomCommand: boolean;
-  outputFile?: string;
-  extra?: string[];
-  constraint?: string[];
-  sourceFiles: string[]; // positional arguments
-  argv: string[]; // all arguments as a list
-}
 
 // TODO(not7cd): test on all correct headers, even with CUSTOM_COMPILE_COMMAND
 export function extractHeaderCommand(
   content: string,
-  outputFileName: string,
-  strict: boolean = true,
+  fileName: string,
 ): PipCompileArgs {
   const compileCommand = constraintLineRegex.exec(content);
   if (compileCommand?.groups === undefined) {
-    throw new Error(
-      `Failed to extract command from header in ${outputFileName}`,
-    );
-  } else {
+    throw new Error(`Failed to extract command from header in ${fileName}`);
+  }
+  logger.trace(
+    `pip-compile: found header in ${fileName}: \n${compileCommand[0]}`,
+  );
+  const command = compileCommand.groups.command;
+  const argv = [command];
+  const isCustomCommand = command !== 'pip-compile';
+  if (isCustomCommand) {
     logger.debug(
-      `Found pip-compile header in ${outputFileName}: \n${compileCommand[0]}`,
+      `pip-compile: custom command ${command} detected (${fileName})`,
     );
-    const command = compileCommand.groups.command;
-    const argv: string[] = [command];
-    const isCustomCommand = command !== 'pip-compile';
-    if (isCustomCommand) {
-      logger.debug(`Custom command ${command} detected`);
+  }
+  if (compileCommand.groups.arguments) {
+    argv.push(...split(compileCommand.groups.arguments));
+  }
+  logger.debug(
+    `pip-compile: extracted command from header: ${JSON.stringify(argv)}`,
+  );
+
+  const result: PipCompileArgs = {
+    argv,
+    command,
+    isCustomCommand,
+    outputFile: '',
+    sourceFiles: [],
+  };
+  for (const arg of argv.slice(1)) {
+    // TODO(not7cd): check for "--option -- argument" case
+    if (!arg.startsWith('-')) {
+      result.sourceFiles.push(arg);
+      continue;
     }
-    if (compileCommand.groups.arguments) {
-      argv.push(...split(compileCommand.groups.arguments));
+    throwForDisallowedOption(arg);
+    throwForNoEqualSignInOptionWithArgument(arg);
+    throwForUnknownOption(arg);
+
+    if (arg.includes('=')) {
+      const [option, value] = arg.split('=');
+      if (option === '--extra') {
+        result.extra = result.extra ?? [];
+        result.extra.push(value);
+      } else if (option === '--extra-index-url') {
+        result.extraIndexUrl = result.extraIndexUrl ?? [];
+        result.extraIndexUrl.push(value);
+        // TODO: add to secrets? next PR
+      } else if (option === '--constraint') {
+        result.constraintsFiles = result.constraintsFiles ?? [];
+        result.constraintsFiles.push(value);
+      } else if (option === '--output-file') {
+        if (result.outputFile) {
+          throw new Error('Cannot use multiple --output-file options');
+        }
+        result.outputFile = value;
+      } else if (option === '--index-url') {
+        if (result.indexUrl) {
+          throw new Error('Cannot use multiple --index-url options');
+        }
+        result.indexUrl = value;
+        // TODO: add to secrets? next PR
+      } else {
+        logger.warn(`pip-compile: option ${arg} not handled`);
+      }
+      continue;
     }
-    logger.debug({ argv }, 'Extracted pip-compile command from header');
-    for (const arg of argv) {
-      // TODO(not7cd): check for "--option -- argument" case
-      if (!arg.startsWith('-')) {
-        continue;
-      }
-      throwForDisallowedOption(arg);
-      throwForNoEqualSignInOptionWithArgument(arg);
-      if (strict) {
-        throwForUnknownOption(arg);
-      }
+    if (arg === '--no-emit-index-url') {
+      result.noEmitIndexUrl = true;
+      continue;
+    }
+    if (arg === '--emit-index-url') {
+      result.emitIndexUrl = true;
+      continue;
     }
 
-    // Commander.parse is expecting argv[0] to be process.execPath, pass empty string as first value
-    const parsedCommand = dummyPipCompile.parse(['', ...argv]);
-    const options = parsedCommand.opts();
-    // workaround, not sure how Commander returns named arguments
-    const sourceFiles = parsedCommand.args.filter(
-      (arg) => !arg.startsWith('-'),
-    );
-    logger.debug(
-      {
-        argv,
-        options,
-        sourceFiles,
-        isCustomCommand,
-      },
-      'Parsed pip-compile command from header',
-    );
-    if (sourceFiles.length === 0) {
-      throw new Error(
-        'No source files detected in command, pass at least one package file explicitly',
-      );
-    }
-    let outputFile = '';
-    if (options.outputFile) {
-      // TODO(not7cd): This file path can be relative like `reqs/main.txt`
-      const file = upath.parse(outputFileName).base;
-      // const cwd = upath.parse(outputFileName).dir;
-      if (options.outputFile === file) {
-        outputFile = options.outputFile;
-      } else {
-        // we don't trust the user-supplied output-file argument;
-        // TODO(not7cd): allow relative paths
-        logger.warn(
-          { outputFile: options.outputFile, actualPath: file },
-          'pip-compile was previously executed with an unexpected `--output-file` filename',
-        );
-        // TODO(not7cd): this shouldn't be changed in extract function
-        outputFile = file;
-        argv.forEach((item, i) => {
-          if (item.startsWith('--output-file=')) {
-            argv[i] = `--output-file=${file}`;
-          }
-        });
-      }
-      return {
-        argv,
-        command,
-        isCustomCommand,
-        outputFile,
-        sourceFiles,
-      };
-    }
-    logger.debug('Implicit output file');
-    return {
-      argv,
-      command,
-      isCustomCommand,
-      outputFile,
-      sourceFiles,
-    };
+    logger.warn(`pip-compile: option ${arg} not handled`);
   }
+
+  logger.trace(
+    {
+      ...result,
+    },
+    'Parsed pip-compile command from header',
+  );
+  if (result.noEmitIndexUrl && result.emitIndexUrl) {
+    throw new Error('Cannot use both --no-emit-index-url and --emit-index-url');
+  }
+  if (result.sourceFiles.length === 0) {
+    throw new Error(
+      'No source files detected in command, pass at least one package file explicitly',
+    );
+  }
+  return result;
 }
 
 function throwForDisallowedOption(arg: string): void {
-  for (const disallowedPipOption of disallowedPipOptions) {
-    if (arg.startsWith(disallowedPipOption)) {
-      throw new Error(
-        `Option ${disallowedPipOption} not allowed for this manager`,
-      );
-    }
+  if (disallowedPipOptions.includes(arg)) {
+    throw new Error(`Option ${arg} not allowed for this manager`);
   }
 }
 
 function throwForNoEqualSignInOptionWithArgument(arg: string): void {
-  for (const option of optionsWithArguments) {
-    if (arg === option) {
-      throw new Error(
-        `Option ${option} must have equal sign '=' separating it's argument`,
-      );
-    }
+  if (optionsWithArguments.includes(arg)) {
+    throw new Error(
+      `Option ${arg} must have equal sign '=' separating it's argument`,
+    );
   }
 }
 
 function throwForUnknownOption(arg: string): void {
-  for (const allowedOption of allowedPipOptions) {
-    if (arg.startsWith(allowedOption)) {
+  if (arg.includes('=')) {
+    const [option] = arg.split('=');
+    if (allowedPipOptions.includes(option)) {
       return;
     }
+  }
+  if (allowedPipOptions.includes(arg)) {
+    return;
   }
   throw new Error(`Option ${arg} not supported (yet)`);
 }

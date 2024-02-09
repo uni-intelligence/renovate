@@ -1,7 +1,6 @@
 import { TEMPORARY_ERROR } from '../../../constants/error-messages';
 import { logger } from '../../../logger';
 import { exec } from '../../../util/exec';
-import type { ExecOptions } from '../../../util/exec/types';
 import {
   deleteLocalFile,
   readLocalFile,
@@ -48,7 +47,7 @@ export async function updateArtifacts({
   for (const outputFileName of config.lockFiles) {
     const existingOutput = await readLocalFile(outputFileName, 'utf8');
     if (!existingOutput) {
-      logger.debug('No pip-compile output file found');
+      logger.debug('pip-compile: No output file found');
       return null;
     }
     try {
@@ -58,10 +57,7 @@ export async function updateArtifacts({
         await deleteLocalFile(outputFileName);
       }
       const cmd = constructPipCompileCmd(existingOutput, outputFileName);
-      const execOptions: ExecOptions = await getExecOptions(
-        config,
-        inputFileName,
-      );
+      const execOptions = await getExecOptions(config, inputFileName);
       logger.trace({ cmd }, 'pip-compile command');
       await exec(cmd, execOptions);
       const status = await getRepoStatus();
@@ -80,7 +76,7 @@ export async function updateArtifacts({
       if (err.message === TEMPORARY_ERROR) {
         throw err;
       }
-      logger.debug({ err }, 'Failed to pip-compile');
+      logger.debug({ err }, 'pip-compile: Failed to run command');
       result.push({
         artifactError: {
           lockFile: outputFileName,
@@ -89,7 +85,7 @@ export async function updateArtifacts({
       });
     }
   }
-  logger.debug('Returning updated pip-compile result');
+  logger.debug('pip-compile: Returning updated output file(s)');
   return result;
 }
 

@@ -1,17 +1,4 @@
-import { mockDeep } from 'jest-mock-extended';
-import { join } from 'upath';
-import { envMock } from '../../../../test/exec-util';
-import { env } from '../../../../test/util';
-import { GlobalConfig } from '../../../config/global';
-import type { RepoGlobalConfig } from '../../../config/types';
-import * as docker from '../../../util/exec/docker';
 import { allowedPipOptions, extractHeaderCommand } from './common';
-
-jest.mock('../../../util/exec/env');
-jest.mock('../../../util/fs');
-jest.mock('../../../util/git');
-jest.mock('../../../util/host-rules', () => mockDeep());
-jest.mock('../../../util/http');
 
 function getCommandInHeader(command: string) {
   return `#
@@ -23,26 +10,7 @@ function getCommandInHeader(command: string) {
 `;
 }
 
-const adminConfig: RepoGlobalConfig = {
-  // `join` fixes Windows CI
-  localDir: join('/tmp/github/some/repo'),
-  cacheDir: join('/tmp/renovate/cache'),
-  containerbaseDir: join('/tmp/renovate/cache/containerbase'),
-};
-
-process.env.CONTAINERBASE = 'true';
-
 describe('modules/manager/pip-compile/common', () => {
-  beforeEach(() => {
-    env.getChildProcessEnv.mockReturnValue({
-      ...envMock.basic,
-      LANG: 'en_US.UTF-8',
-      LC_ALL: 'en_US',
-    });
-    GlobalConfig.set(adminConfig);
-    docker.resetPrefetchedImages();
-  });
-
   describe('extractHeaderCommand()', () => {
     it.each([
       '-v',
@@ -50,6 +18,7 @@ describe('modules/manager/pip-compile/common', () => {
       '--resolver=backtracking',
       '--resolver=legacy',
       '--output-file=reqs.txt',
+      '--extra-index-url=https://pypi.org/simple',
     ])('returns object on correct options', (argument: string) => {
       expect(
         extractHeaderCommand(
@@ -71,7 +40,7 @@ describe('modules/manager/pip-compile/common', () => {
       },
     );
 
-    it.each(['--foo', '-x', '--$(curl this)', '--bar=sus'])(
+    it.each(['--foo', '-x', '--$(curl this)', '--bar=sus', '--extra-large'])(
       'errors on unknown options',
       (argument: string) => {
         expect(() =>
@@ -95,7 +64,21 @@ describe('modules/manager/pip-compile/common', () => {
       },
     );
 
-    test('error when no source files passed as arguments', () => {
+    it.each(['--output-file', '--index-url'])(
+      'throws on duplicate options',
+      (argument: string) => {
+        expect(() =>
+          extractHeaderCommand(
+            getCommandInHeader(
+              `pip-compile ${argument}=xxx ${argument}=xxx reqs.in`,
+            ),
+            'reqs.txt',
+          ),
+        ).toThrow(/multiple/);
+      },
+    );
+
+    it('throws when no source files passed as arguments', () => {
       expect(() =>
         extractHeaderCommand(
           getCommandInHeader(`pip-compile --extra=color`),
@@ -104,7 +87,22 @@ describe('modules/manager/pip-compile/common', () => {
       ).toThrow(/source/);
     });
 
-    test('returned sourceFiles returns all source files', () => {
+    it('throws on malformed header', () => {
+      expect(() => extractHeaderCommand('Dd', 'reqs.txt')).toThrow(/extract/);
+    });
+
+    it('throws on mutually exclusive options', () => {
+      expect(() =>
+        extractHeaderCommand(
+          getCommandInHeader(
+            `pip-compile --no-emit-index-url --emit-index-url reqs.in`,
+          ),
+          'reqs.txt',
+        ),
+      ).toThrow();
+    });
+
+    it('returned sourceFiles returns all source files', () => {
       const exampleSourceFiles = [
         'requirements.in',
         'reqs/testing.in',
@@ -133,5 +131,14 @@ describe('modules/manager/pip-compile/common', () => {
         expect(sourceFiles).toEqual(['reqs.in']);
       },
     );
+
+    it('detects custom command', () => {
+      expect(
+        extractHeaderCommand(
+          getCommandInHeader(`./pip-compile-wrapper reqs.in`),
+          'reqs.txt',
+        ),
+      ).toHaveProperty('isCustomCommand', true);
+    });
   });
 });

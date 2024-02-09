@@ -11,8 +11,9 @@ import type {
   PackageFileContent,
 } from '../types';
 import { extractHeaderCommand } from './common';
+import type { SupportedManagers } from './types';
 
-function matchManager(filename: string): string {
+function matchManager(filename: string): SupportedManagers | 'unknown' {
   if (filename.endsWith('setup.py')) {
     return 'pip_setup';
   }
@@ -31,12 +32,12 @@ function matchManager(filename: string): string {
 
 export function extractPackageFile(
   content: string,
-  _packageFile: string,
+  packageFile: string,
   _config: ExtractConfig,
 ): PackageFileContent | null {
   logger.trace('pip-compile.extractPackageFile()');
-  const manager = matchManager(_packageFile);
-  // TODO(not7cd): extract based on manager: pep621, setupdools, identify other missing source types
+  const manager = matchManager(packageFile);
+  // TODO(not7cd): extract based on manager: pep621, setuptools, identify other missing source types
   switch (manager) {
     // TODO(not7cd): enable in the next PR, when this can be properly tested
     // case 'pip_setup':
@@ -45,8 +46,17 @@ export function extractPackageFile(
     //   return await extractSetupCfgFile(content);
     case 'pip_requirements':
       return extractRequirementsFile(content);
+    case 'unknown':
+      logger.warn(
+        { packageFile },
+        `pip-compile: could not determine manager for source file, fallback to pip_requirements`,
+      );
+      return extractRequirementsFile(content);
     default:
-      logger.error(`Unsupported manager ${manager} for ${_packageFile}`);
+      logger.warn(
+        { packageFile, manager },
+        `pip-compile: support for manager is not yet implemented`,
+      );
       return null;
   }
 }
