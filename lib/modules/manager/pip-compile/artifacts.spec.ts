@@ -338,7 +338,6 @@ describe('modules/manager/pip-compile/artifacts', () => {
       expect(
         constructPipCompileCmd(
           Fixtures.get('requirementsNoHeaders.txt'),
-          'subdir/requirements.in',
           'subdir/requirements.txt',
           true,
         ),
@@ -361,7 +360,6 @@ describe('modules/manager/pip-compile/artifacts', () => {
       expect(
         constructPipCompileCmd(
           Fixtures.get('requirementsWithHashes.txt'),
-          'subdir/requirements.in',
           'subdir/requirements.txt',
           true,
         ),
@@ -372,7 +370,7 @@ describe('modules/manager/pip-compile/artifacts', () => {
 
     it('safeguard against index url leak if not explicitly set by an option', () => {
       expect(
-        constructPipCompileCmd(simpleHeader, 'subdir/requirements.txt'),
+        constructPipCompileCmd(simpleHeader, 'subdir/requirements.txt', false),
       ).toBe('pip-compile --no-emit-index-url requirements.in');
     });
 
@@ -381,6 +379,7 @@ describe('modules/manager/pip-compile/artifacts', () => {
         constructPipCompileCmd(
           getCommandInHeader('pip-compile --emit-index-url requirements.in'),
           'subdir/requirements.txt',
+          true,
         ),
       ).toBe('pip-compile --emit-index-url requirements.in');
     });
@@ -405,6 +404,7 @@ describe('modules/manager/pip-compile/artifacts', () => {
         constructPipCompileCmd(
           Fixtures.get('requirementsWithUnknownArguments.txt'),
           'subdir/requirements.txt',
+          false,
         ),
       ).toThrow(/supported/);
     });
@@ -414,6 +414,7 @@ describe('modules/manager/pip-compile/artifacts', () => {
         constructPipCompileCmd(
           Fixtures.get('requirementsCustomCommand.txt'),
           'subdir/requirements.txt',
+          false,
         ),
       ).toThrow(/custom/);
     });
