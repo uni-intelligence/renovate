@@ -1,11 +1,17 @@
 import is from '@sindresorhus/is';
 import { split } from 'shlex';
 import { logger } from '../../../logger';
+import { isNotNullOrUndefined } from '../../../util/array';
 import type { ExecOptions } from '../../../util/exec/types';
 import { ensureCacheDir } from '../../../util/fs';
+import * as hostRules from '../../../util/host-rules';
 import { regEx } from '../../../util/regex';
-import type { UpdateArtifactsConfig } from '../types';
-import type { DependencyBetweenFiles, PipCompileArgs } from './types';
+import type { PackageFileContent, UpdateArtifactsConfig } from '../types';
+import type {
+  DependencyBetweenFiles,
+  GetRegistryUrlVarsResult,
+  PipCompileArgs,
+} from './types';
 
 export function getPythonConstraint(
   config: UpdateArtifactsConfig,
@@ -35,6 +41,7 @@ export function getPipToolsConstraint(config: UpdateArtifactsConfig): string {
 export async function getExecOptions(
   config: UpdateArtifactsConfig,
   inputFileName: string,
+  extraEnv: Record<string, string>,
 ): Promise<ExecOptions> {
   const constraint = getPythonConstraint(config);
   const pipToolsConstraint = getPipToolsConstraint(config);
@@ -53,6 +60,7 @@ export async function getExecOptions(
     ],
     extraEnv: {
       PIP_CACHE_DIR: await ensureCacheDir('pip'),
+      ...extraEnv,
     },
   };
   return execOptions;
@@ -232,4 +240,73 @@ export function generateMermaidGraph(
 // https://packaging.python.org/en/latest/specifications/name-normalization/
 export function normalizeDepName(name: string): string {
   return name.replace(/[-_.]+/g, '-').toLowerCase();
+}
+
+function buildRegistryUrl(url: string): URL | null {
+  try {
+    const ret = new URL(url);
+    const hostRule = hostRules.find({ url });
+    if (!ret.username && !ret.password) {
+      ret.username = hostRule.username ?? '';
+      ret.password = hostRule.password ?? '';
+    }
+    return ret;
+  } catch {
+    return null;
+  }
+}
+
+function getRegistryUrlVarFromUrls(
+  varName: keyof GetRegistryUrlVarsResult['environmentVars'],
+  urls: URL[],
+): GetRegistryUrlVarsResult {
+  if (!urls.length) {
+    return {
+      haveCredentials: false,
+      environmentVars: {},
+    };
+  }
+
+  let haveCredentials = false;
+  for (const url of urls) {
+    if (url.username || url.password) {
+      haveCredentials = true;
+    }
+  }
+  const registryUrlsString = urls.map((url) => url.href).join(' ');
+  const ret: GetRegistryUrlVarsResult = {
+    haveCredentials,
+    environmentVars: {},
+  };
+  if (registryUrlsString) {
+    ret.environmentVars[varName] = registryUrlsString;
+  }
+  return ret;
+}
+
+export function getRegistryUrlVarsFromPackageFile(
+  packageFile: PackageFileContent | null,
+): GetRegistryUrlVarsResult {
+  // There should only ever be one element in registryUrls, since pip_requirements gets them from --index-url
+  // flags in the input file, and that only makes sense once
+  const indexUrl = getRegistryUrlVarFromUrls(
+    'PIP_INDEX_URL',
+    packageFile?.registryUrls
+      ?.map(buildRegistryUrl)
+      .filter(isNotNullOrUndefined) ?? [],
+  );
+  const extraIndexUrls = getRegistryUrlVarFromUrls(
+    'PIP_EXTRA_INDEX_URL',
+    packageFile?.additionalRegistryUrls
+      ?.map(buildRegistryUrl)
+      .filter(isNotNullOrUndefined) ?? [],
+  );
+
+  return {
+    haveCredentials: indexUrl.haveCredentials || extraIndexUrls.haveCredentials,
+    environmentVars: {
+      ...indexUrl.environmentVars,
+      ...extraIndexUrls.environmentVars,
+    },
+  };
 }
