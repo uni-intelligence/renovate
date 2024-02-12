@@ -21,6 +21,7 @@ export function constructPipCompileCmd(
   content: string,
   outputFileName: string,
   haveCredentials: boolean,
+  additionalArgs: string[],
 ): string {
   const headerArguments = extractHeaderCommand(content, outputFileName);
   if (headerArguments.isCustomCommand) {
@@ -56,12 +57,18 @@ export function constructPipCompileCmd(
   ) {
     headerArguments.argv.splice(1, 0, '--no-emit-index-url');
   }
+  for (const arg of additionalArgs) {
+    if (arg.startsWith('--upgrade-package=')) {
+      headerArguments.argv.push(arg);
+    }
+  }
   return headerArguments.argv.map(quote).join(' ');
 }
 
 export async function updateArtifacts({
   packageFileName: inputFileName,
   newPackageFileContent: newInputContent,
+  updatedDeps,
   config,
 }: UpdateArtifact): Promise<UpdateArtifactsResult[] | null> {
   if (!config.lockFiles) {
@@ -89,12 +96,21 @@ export async function updateArtifacts({
       if (config.isLockFileMaintenance) {
         await deleteLocalFile(outputFileName);
       }
+      const additionalArgs: string[] = [];
+      updatedDeps.forEach((dep) => {
+        if (dep.managerData?.type === 'indirect') {
+          additionalArgs.push(
+            `--upgrade-package=${dep.depName}==${dep.newVersion}`,
+          );
+        }
+      });
       const packageFile = pipRequirements.extractPackageFile(newInputContent);
       const registryUrlVars = getRegistryUrlVarsFromPackageFile(packageFile);
       const cmd = constructPipCompileCmd(
         existingOutput,
         outputFileName,
         registryUrlVars.haveCredentials,
+        additionalArgs,
       );
       const execOptions = await getExecOptions(
         config,
