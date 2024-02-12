@@ -96,7 +96,7 @@ export async function extractAllPackageFiles(
       });
     }
     // TODO(not7cd): handle locked deps
-    // const lockedDeps = extractRequirementsFile(content);
+    const lockedDeps = extractRequirementsFile(fileContent)?.deps;
     for (const packageFile of pipCompileArgs.sourceFiles) {
       depsBetweenFiles.push({
         sourceFile: packageFile,
@@ -116,6 +116,7 @@ export async function extractAllPackageFiles(
           `pip-compile: ${packageFile} used in multiple output files`,
         );
         packageFiles.get(packageFile)!.lockFiles!.push(fileMatch);
+        // TODO(not7cd): handle locked deps, what to do if differ between lock files
         continue;
       }
       const content = await readLocalFile(packageFile, 'utf8');
@@ -130,6 +131,11 @@ export async function extractAllPackageFiles(
         config,
       );
       if (packageFileContent) {
+        for (const dep of packageFileContent.deps) {
+          dep.lockedVersion = lockedDeps?.find(
+            (lockedDep) => lockedDep.depName === dep.depName,
+          )?.currentVersion;
+        }
         packageFiles.set(packageFile, {
           ...packageFileContent,
           lockFiles: [fileMatch],
