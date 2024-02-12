@@ -21,7 +21,7 @@ export function constructPipCompileCmd(
   content: string,
   outputFileName: string,
   haveCredentials: boolean,
-  additionalArgs: string[],
+  additionalArgs: string[] = [],
 ): string {
   const headerArguments = extractHeaderCommand(content, outputFileName);
   if (headerArguments.isCustomCommand) {
