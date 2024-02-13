@@ -39,13 +39,12 @@ export function constructPipCompileCmd(
         { outputFile: headerArguments.outputFile, actualPath: file },
         'pip-compile was previously executed with an unexpected `--output-file` filename',
       );
-      // TODO(not7cd): this shouldn't be changed in extract function
-      headerArguments.outputFile = file;
-      headerArguments.argv.forEach((item, i) => {
-        if (item.startsWith('--output-file=')) {
-          headerArguments.argv[i] = `--output-file=${quote(file)}`;
-        }
-      });
+      // headerArguments.outputFile = file;
+      // headerArguments.argv.forEach((item, i) => {
+      //   if (item.startsWith('--output-file=')) {
+      //     headerArguments.argv[i] = `--output-file=${quote(file)}`;
+      //   }
+      // });
     }
   } else {
     logger.debug(`pip-compile: implicit output file (${outputFileName})`);
