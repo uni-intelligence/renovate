@@ -5,7 +5,11 @@ import { extractPackageFile as extractRequirementsFile } from '../pip_requiremen
 // import { extractPackageFile as extractSetupPyFile } from '../pip_setup';
 // import { extractPackageFile as extractSetupCfgFile } from '../setup-cfg';
 import type { ExtractConfig, PackageFile, PackageFileContent } from '../types';
-import { extractHeaderCommand, generateMermaidGraph } from './common';
+import {
+  extractHeaderCommand,
+  generateMermaidGraph,
+  normalizeDepName,
+} from './common';
 import type {
   DependencyBetweenFiles,
   PipCompileArgs,
@@ -133,7 +137,9 @@ export async function extractAllPackageFiles(
       if (packageFileContent) {
         for (const dep of packageFileContent.deps) {
           dep.lockedVersion = lockedDeps?.find(
-            (lockedDep) => lockedDep.depName === dep.depName,
+            (lockedDep) =>
+              normalizeDepName(lockedDep.depName!) ===
+              normalizeDepName(dep.depName!),
           )?.currentVersion;
         }
         packageFiles.set(packageFile, {

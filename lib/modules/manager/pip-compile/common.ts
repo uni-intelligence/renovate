@@ -227,3 +227,9 @@ export function generateMermaidGraph(
   });
   return `graph TD\n${lockFiles.join('\n')}\n${edges.join('\n')}`;
 }
+
+// TODO: move to pep440 module
+// https://packaging.python.org/en/latest/specifications/name-normalization/
+export function normalizeDepName(name: string): string {
+  return name.replace(/[-_.]+/g, '-').toLowerCase();
+}
