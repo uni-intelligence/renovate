@@ -167,7 +167,7 @@ export async function getUpdatedPackageFiles(
       } else {
         logger.debug(
           { manager },
-          'isLockFileUpdate without updateLockedDependency',
+          'isLockfileUpdate without updateLockedDependency',
         );
         if (!updatedFileContents[packageFile]) {
           nonUpdatedFileContents[packageFile] = packageFileContent!;
