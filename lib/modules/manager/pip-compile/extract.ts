@@ -3,7 +3,7 @@ import { logger } from '../../../logger';
 import { readLocalFile } from '../../../util/fs';
 import { extractPackageFile as extractRequirementsFile } from '../pip_requirements/extract';
 // TODO(not7cd): enable in the next PR, when this can be properly tested
-// import { extractPackageFile as extractSetupPyFile } from '../pip_setup';
+import { extractPackageFile as extractSetupPyFile } from '../pip_setup';
 // import { extractPackageFile as extractSetupCfgFile } from '../setup-cfg';
 import type { ExtractConfig, PackageFile, PackageFileContent } from '../types';
 import {
@@ -44,8 +44,8 @@ export function extractPackageFile(
   // TODO(not7cd): extract based on manager: pep621, setuptools, identify other missing source types
   switch (manager) {
     // TODO(not7cd): enable in the next PR, when this can be properly tested
-    // case 'pip_setup':
-    //   return extractSetupPyFile(content, _packageFile, _config);
+    case 'pip_setup':
+      return extractSetupPyFile(content, packageFile, _config);
     // case 'setup-cfg':
     //   return await extractSetupCfgFile(content);
     case 'pip_requirements':
