@@ -232,6 +232,27 @@ export async function lookupUpdates(
       ) {
         rangeStrategy = 'bump';
       }
+      // pip-compile indirect only
+      if (config.manager === 'pip-compile') {
+        // create updates for direct dependencies with only lockedVersion
+        if (
+          config.isVulnerabilityAlert &&
+          !config.currentValue &&
+          config.lockedVersion
+        ) {
+          rangeStrategy = 'update-lockfile';
+          // this is a direct dependency, but we only have the lockedVersion
+          config.managerData = { ...config.managerData, type: 'indirect' };
+        } else if (
+          config.isVulnerabilityAlert &&
+          config.managerData?.type === 'indirect'
+        ) {
+          rangeStrategy === 'update-lockfile';
+        } else if (config.managerData?.type === 'indirect') {
+          res.skipReason = 'ignored';
+          return res;
+        }
+      }
       const nonDeprecatedVersions = dependency.releases
         .filter((release) => !release.isDeprecated)
         .map((release) => release.version);
@@ -350,6 +371,10 @@ export async function lookupUpdates(
       }
       const depResultConfig = mergeChildConfig(config, res);
       for (const [bucket, releases] of Object.entries(buckets)) {
+        logger.info(
+          { m: config.manager, md: config.managerData },
+          'PREGENERATE',
+        );
         const sortedReleases = releases.sort((r1, r2) =>
           versioning.sortVersions(r1.version, r2.version),
         );
