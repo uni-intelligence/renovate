@@ -95,7 +95,7 @@ export async function updateArtifacts({
       }
       const additionalArgs: string[] = [];
       updatedDeps.forEach((dep) => {
-        if (dep.managerData?.type === 'indirect') {
+        if (dep.isLockfileUpdate) {
           additionalArgs.push(
             `--upgrade-package=${dep.depName}==${dep.newVersion}`,
           );

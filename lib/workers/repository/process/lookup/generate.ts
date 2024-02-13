@@ -95,6 +95,13 @@ export async function generateUpdate(
   if (rangeStrategy === 'update-lockfile' && currentValue === update.newValue) {
     update.isLockfileUpdate = true;
   }
+  logger.info({ m: config.manager, md: config.managerData }, 'GENERATE');
+  if (
+    config.manager === 'pip-compile' &&
+    config.managerData?.type === 'indirect'
+  ) {
+    update.isLockfileUpdate = true;
+  }
   if (
     rangeStrategy === 'bump' &&
     // TODO #22198

@@ -161,6 +161,25 @@ export async function extractAllPackageFiles(
               normalizeDepName(dep.depName!),
           )?.currentVersion;
         }
+        // see: lib/workers/repository/process/lookup/index.ts
+        // ref: https://github.com/renovatebot/renovate/discussions/26947
+        for (const lockedDep of lockedDeps!) {
+          if (
+            !packageFileContent.deps.some(
+              (dep) =>
+                normalizeDepName(lockedDep.depName!) ===
+                normalizeDepName(dep.depName!),
+            )
+          ) {
+            const indirectDep = {
+              ...lockedDep,
+              lockedVersion: lockedDep.currentVersion,
+              managerData: { type: 'indirect' },
+            };
+            delete indirectDep.currentVersion;
+            packageFileContent.deps.push(indirectDep);
+          }
+        }
         packageFiles.set(packageFile, {
           ...packageFileContent,
           lockFiles: [fileMatch],
