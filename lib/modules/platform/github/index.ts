@@ -44,6 +44,7 @@ import { regEx } from '../../../util/regex';
 import { sanitize } from '../../../util/sanitize';
 import { coerceString, fromBase64, looseEquals } from '../../../util/string';
 import { ensureTrailingSlash } from '../../../util/url';
+import { normalizeDepName } from '../../datasource/pypi/common';
 import type {
   AggregatedVulnerabilities,
   AutodiscoverConfig,
@@ -1992,6 +1993,11 @@ export async function getVulnerabilityAlerts(): Promise<VulnerabilityAlert[]> {
             // GitHub API responds with `"securityVulnerability": null`.
             // But it's may be faulty, so skip processing it here.
             continue;
+          }
+          if (alert.securityVulnerability.package.ecosystem === 'pip') {
+            alert.securityVulnerability.package.name = normalizeDepName(
+              alert.securityVulnerability.package.name,
+            );
           }
           const {
             package: { name, ecosystem },
